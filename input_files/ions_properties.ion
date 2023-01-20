@@ -1,0 +1,74 @@
+
+// Specify file with ion profiles:
+// =============================================================================
+IC_ionProfiles_fileName       ions_IC.h5
+
+// =============================================================================
+// *****************************     SPECIES 1     *****************************
+// =============================================================================
+
+// Species 1, general:
+// =============================================================================
+SPECIES1                      1
+N_CP1                         10000
+pct_N_CP_Output1              100
+Z1                            1
+M1                            2.0
+
+// Species 1, initial conditions:
+// =============================================================================
+IC_Tpar_offset1              0.0
+IC_Tpar_scale1               1.0
+IC_Tper_offset1              0.0
+IC_Tper_scale1               1.0
+IC_upar_offset1              0.0
+IC_upar_scale1               1.0
+IC_densityFraction1          0.8
+
+// Species 1, boundary conditions:
+// =============================================================================
+// 1: Warm plasma source, 2: NBI, 3: Periodic, 4: simple-reinjection
+BC_type1                     1
+BC_T1                        15
+BC_E1                        0
+BC_eta1                      45
+BC_mean_x1                   0
+BC_sigma_x1                  0.4
+BC_G1                        1E22
+BC_G_fileName1
+//BC_G_NS1                     200
+
+// =============================================================================
+// *****************************     SPECIES 2     *****************************
+// =============================================================================
+
+// Species 2, general:
+// =============================================================================
+SPECIES2                      1
+N_CP2                         1000
+pct_N_CP_Output2              100
+Z2                            1
+M2                            3.0
+
+// Species 2, initial conditions:
+// =============================================================================
+IC_Tpar_offset2               0.0
+IC_Tpar_scale2                1.0
+IC_Tper_offset2               0.0
+IC_Tper_scale2                1.0
+IC_upar_offset2               0.0
+IC_upar_scale2                1.0
+IC_densityFraction2           0.2
+
+// Species 2, boundary conditions:
+// =============================================================================
+// 1: Warm plasma source, 2: NBI, 3: Periodic, 4: simple-reinjection
+BC_type2                      1
+BC_T2                         15
+BC_E2                         0
+BC_eta2                       45
+BC_mean_x2                    0
+BC_sigma_x2                   0.4
+BC_G2                         1E22
+BC_G_fileName2
+//BC_G_NS2                      200
