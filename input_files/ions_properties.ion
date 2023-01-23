@@ -1,7 +1,8 @@
 
 // Specify file with ion profiles:
 // =============================================================================
-IC_ionProfiles_fileName       ions_IC.h5
+IC_ions_fileName              ions_IC.h5
+IC_CP_pdf_fileName            computationalParticles_IC.h5
 
 // =============================================================================
 // *****************************     SPECIES 1     *****************************
@@ -24,6 +25,7 @@ IC_Tper_scale1               1.0
 IC_upar_offset1              0.0
 IC_upar_scale1               1.0
 IC_densityFraction1          0.8
+IC_mean_ai1                  1.5
 
 // Species 1, boundary conditions:
 // =============================================================================
@@ -45,7 +47,8 @@ BC_G_fileName1
 // Species 2, general:
 // =============================================================================
 SPECIES2                      1
-N_CP2                         1000
+N_CP2                         5000
+mean_ai2                      1.5
 pct_N_CP_Output2              100
 Z2                            1
 M2                            3.0
@@ -59,6 +62,7 @@ IC_Tper_scale2                1.0
 IC_upar_offset2               0.0
 IC_upar_scale2                1.0
 IC_densityFraction2           0.2
+IC_mean_ai2                   1.5
 
 // Species 2, boundary conditions:
 // =============================================================================

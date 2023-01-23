@@ -1,6 +1,20 @@
-
 #include <initialize.h>
 #include <exception>
+using namespace arma;
+
+// Notes to consider:
+// The initial condition profiles are (1) the electron and (2) ion profiles which then define the discrete particle distribution and (3) the field profiles.
+// The cross sectional area depends entirely on A0 and Bxm
+// In general, fields.Bxm is time-depedent and so is Am in that case, therefore, strictly speaking Am needs to be calculated from the lastest value of Bxm which lives in "fields".
+// Thus fields could have a method that takes in A0 and computes Am as follows:
+// void fields.getAm(double A0) which updates the value of Am given the present value of Bxm.
+// Make use of const attribute to avoid writting to some argyments
+
+
+void dbg(int i)
+{
+  std::cout << "checkpoint " << i << endl;
+}
 
 // #########################################################################################################
 
@@ -176,7 +190,7 @@ void CheckMap(std::map<string,string> parametersStringMap, string key)
 // #########################################################################################################
 
 // Populate params with data from input file:
-void init_TYP::readInputFile(params_TYP * params)
+void init_TYP::read_inputFile(params_TYP * params)
 {
     //MPI_Barrier(MPI_COMM_WORLD);
 
@@ -276,14 +290,19 @@ void init_TYP::readInputFile(params_TYP * params)
     params->electrons_IC.T_offset = stod(parametersStringMap["IC_T_offset"]);
     params->electrons_IC.T_scale  = stod(parametersStringMap["IC_T_scale"]);
 
-    // Geometry:
+    // Mesh:
     // -------------------------------------------------------------------------
-    params->geometry.dx_norm = stod(parametersStringMap["GEO_dx_norm"]);
-    params->geometry.x0      = stod(parametersStringMap["GEO_x0"]);
-    params->geometry.r0_min  = stod(parametersStringMap["GE0_r0_min"]);
-    params->geometry.r0_max  = stod(parametersStringMap["GEO_r0_max"]);
-    params->geometry.Lx_min  = stod(parametersStringMap["GEO_Lx_min"]);
-    params->geometry.Lx_max  = stod(parametersStringMap["GEO_Lx_max"]);
+    params->mesh_params.dx_norm = stod(parametersStringMap["M_dx_norm"]);
+    params->mesh_params.x0      = stod(parametersStringMap["M_x0"]);
+    params->mesh_params.r0_min  = stod(parametersStringMap["M_r0_min"]);
+    params->mesh_params.r0_max  = stod(parametersStringMap["M_r0_max"]);
+    params->mesh_params.Lx_min  = stod(parametersStringMap["M_Lx_min"]);
+    params->mesh_params.Lx_max  = stod(parametersStringMap["M_Lx_max"]);
+    params->mesh_params.getA0();
+
+    cout << "rmax =  " << params->mesh_params.r0_max  << endl;
+    cout << "rmin =  " << params->mesh_params.r0_min  << endl;
+    cout << "A0 =  " << params->mesh_params.A0  << endl;
 
     // RF parameters
     // -------------------------------------------------------------------------
@@ -326,7 +345,7 @@ void init_TYP::readInputFile(params_TYP * params)
 // #########################################################################################################
 
 // Read and populate ion parameters input file:
-void init_TYP::readIonPropertiesFile(params_TYP * params)
+void init_TYP::read_ionsPropertiesFile(params_TYP * params)
 {
   // MPI_Barrier(MPI_COMM_WORLD);
 
@@ -361,41 +380,48 @@ void init_TYP::readIonPropertiesFile(params_TYP * params)
   // =========================================
   int totalNumSpecies(params->numberOfParticleSpecies + params->numberOfTracerSpecies);
 
-  // Allocate memory to vector holding ion IC and BC condition PARAMETERS:
-  // ==================================================================
-  params->ions_IC.resize(totalNumSpecies);
-  params->ions_BC.resize(totalNumSpecies);
-  //IONS->resize(totalNumSpecies);
-
-  // Populate ion IC and BC conditions PARAMETERS in params:
-  // ======================================================
+  // Get ion parameters:
+  // ====================
+  params->ions_params.resize(totalNumSpecies);
   for(int ss = 0; ss<totalNumSpecies; ss++)
   {
-    params->ions_IC[ss].fileName = parametersMap["IC_ionProfiles_fileName"];
-
     string name;
     stringstream kk;
     kk << ss + 1;
 
     // General:
     name = "SPECIES" + kk.str();
-    params->ions_IC[ss].SPECIES = stoi(parametersMap[name]);
+    params->ions_params[ss].SPECIES = stoi(parametersMap[name]);
     //IONS->at(ss).SPECIES         = stoi(parametersMap[name]);
 
     name = "N_CP" + kk.str();
-    params->ions_IC[ss].N_CP = stoi(parametersMap[name]);
+    params->ions_params[ss].N_CP = stoi(parametersMap[name]);
     //IONS->at(ss).N_CP         = stoul(parametersMap[name]);
 
     name = "pct_N_CP_Output" + kk.str();
-    params->ions_IC[ss].pct_N_CP_Output = stoi(parametersMap[name]);
+    params->ions_params[ss].pct_N_CP_Output = stoi(parametersMap[name]);
 
     name = "Z" + kk.str();
-    params->ions_IC[ss].Z = stoi(parametersMap[name]);
+    params->ions_params[ss].Z = stoi(parametersMap[name]);
     //IONS->at(ss).Z         = stoi(parametersMap[name]);
 
     name = "M" + kk.str();
-    params->ions_IC[ss].M = stoi(parametersMap[name]);
+    params->ions_params[ss].M = F_U*stod(parametersMap[name]);
     //IONS->at(ss).M         = stoi(parametersMap[name]);
+  }
+
+  // Get ion IC and BC:
+  // ======================================================
+  params->ions_IC.resize(totalNumSpecies);
+  params->ions_BC.resize(totalNumSpecies);
+  for(int ss = 0; ss<totalNumSpecies; ss++)
+  {
+    params->ions_IC[ss].fileName = parametersMap["IC_ions_fileName"];
+    params->ions_IC[ss].CP_fileName = parametersMap["IC_CP_pdf_fileName"];
+
+    string name;
+    stringstream kk;
+    kk << ss + 1;
 
     // IC:
     name = "IC_Tpar_offset" + kk.str();
@@ -418,6 +444,9 @@ void init_TYP::readIonPropertiesFile(params_TYP * params)
 
     name = "IC_densityFraction" + kk.str();
     params->ions_IC[ss].densityFraction = stod(parametersMap[name]);
+
+    name = "IC_mean_ai" + kk.str();
+    params->ions_IC[ss].mean_ai = stod(parametersMap[name]);
 
     // BC:
     name = "BC_type" + kk.str();
@@ -458,8 +487,51 @@ void init_TYP::readIonPropertiesFile(params_TYP * params)
 
 // #########################################################################################################
 
+void init_TYP::create_mesh(params_TYP * params, mesh_TYP * mesh)
+{
+  // Prior to calculating mesh quantities, we need to compute the characteristic skin depth using
+  // the characteristic value for the density, mass and charge.
+  // The characteristic density is given in the inputfile.
+  // For the other terms, we use the charge and mass of the majority ion.
+
+  // Calculating Nx:
+  // ==================================================================
+  // Calculate characteristic skin depth:
+  params->getCharacteristicIonSkinDepth();
+  double ionSkinDepth = params->mesh_params.ionSkinDepth;
+
+  // Calculate Nx:
+  params->getNx(ionSkinDepth);
+  int Nx = params->mesh_params.Nx;
+
+  // Calculate mesh-defined cell centers:
+  // ==================================================================
+  arma::vec xm  = arma::zeros(Nx);
+  arma::vec xmg = arma::zeros(Nx+2);
+  double Lx_min = params->mesh_params.Lx_min;
+  double dx     = params->mesh_params.dx;
+
+  // No ghost cells:
+  for (int i = 0; i < Nx; i++)
+  {
+    xm.at(i) = Lx_min + (i + 0.5)*dx;
+  }
+
+  // With ghost cells:
+  for (int i = 0; i < (Nx+2); i++)
+  {
+    xmg.at(i) = Lx_min + (i - 0.5)*dx;
+  }
+
+  // Assign vectors:
+  mesh->xm  = xm;
+  mesh->xmg = xmg;
+}
+
+// #########################################################################################################
+
 // Read "ion properties" file and populate IC object with profiles:
-void init_TYP::readInitialConditionProfiles(params_TYP * params, IC_TYP * IC)
+void init_TYP::read_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_TYP * IC)
 {
   // MPI_Barrier(MPI_COMM_WORLD);
 
@@ -473,7 +545,7 @@ void init_TYP::readInitialConditionProfiles(params_TYP * params, IC_TYP * IC)
   // Directory where profile data is located:
   string directory = "input_files/";
 
-  // Electron profiles:
+  // Read and scale electron profiles:
   // =====================================================
   // Assemble full path to HDF5 file with profiles:
   string fileName  = params->electrons_IC.fileName;
@@ -498,7 +570,7 @@ void init_TYP::readInitialConditionProfiles(params_TYP * params, IC_TYP * IC)
   scale  = params->electrons_IC.T_scale;
   IC->electrons.T = offset + scale*y;
 
-  // Fields profiles:
+  // Read and scale fields profiles:
   // ==================================================
   fileName  = params->fields_IC.fileName;
   fullPath = directory + fileName;
@@ -544,7 +616,7 @@ void init_TYP::readInitialConditionProfiles(params_TYP * params, IC_TYP * IC)
     IC->fields.ddBx.save("ddBx.txt",arma::raw_ascii);
   }
 
-  // Ions profiles:
+  // Read and scale ions profiles:
   // ==================================================
   // Determine the total number of ION species:
   int totalNumSpecies(params->numberOfParticleSpecies + params->numberOfTracerSpecies);
@@ -552,11 +624,11 @@ void init_TYP::readInitialConditionProfiles(params_TYP * params, IC_TYP * IC)
   // Allocate memory:
   IC->ions.resize(totalNumSpecies);
 
-  // Assemble full path to HDF5 file with profiles:
+  // Assemble full path to HDF5 file with ion profiles:
   fileName  = params->ions_IC.at(0).fileName;
   fullPath = directory + fileName;
 
-  // Load data from H5 file into containers:
+  // Load ion profile data from H5 file into containers:
   for (int ss = 0; ss < totalNumSpecies; ss++)
   {
     string dataset;
@@ -591,14 +663,198 @@ void init_TYP::readInitialConditionProfiles(params_TYP * params, IC_TYP * IC)
     IC->ions.at(ss).upar = offset + scale*y;
   }
 
-  IC->ions.at(0).n.save("n0.txt",arma::raw_ascii);
-  IC->ions.at(1).n.save("n1.txt",arma::raw_ascii);
+  // Read computational particle profiles:
+  // ==================================================
+  // Assemble full path to HDF5 file with computational particle (CP) profile:
+  fileName  = params->ions_IC.at(0).CP_fileName;
+  fullPath = directory + fileName;
+
+  // Load CP profile data from H5 file into containers:
+  for (int ss = 0; ss < totalNumSpecies; ss++)
+  {
+    y.load(arma::hdf5_name(fullPath,"n_pdf"));
+    IC->ions.at(ss).ncp_pdf = y;
+  }
+
+  if (0)
+  {
+    IC->ions.at(0).x.save("x.txt",arma::raw_ascii);
+    IC->ions.at(0).ncp_pdf.save("n_pdf.txt",arma::raw_ascii);
+  }
+
+  // MPI_Barrier(MPI_COMM_WORLD);
 
 }
 
 // #########################################################################################################
 
-void init_TYP::calculateGlobalQuantities(params_TYP * params, IC_TYP * IC, vector<ions_TYP> * IONS)
+void interp_scalar(arma::vec * xv, arma::vec * yv, double * x, double * y)
+{
+  // Convert input doubles into 1D arma vectors:
+  arma::vec xq(1); xq = {*x};
+  arma::vec yq(1);
+
+  // Interpolate:
+  arma::interp1(*xv,*yv,xq,yq);
+
+  // Return value:
+  *y = arma::as_scalar(yq);
+}
+
+// #########################################################################################################
+
+void init_TYP::interpolate_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_TYP * IC)
+{
+  // MPI_Barrier(MPI_COMM_WORLD);
+
+  // Print to terminal:
+  // ==================
+  // if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+      cout << endl << "* * * * * * * * * * * INTERPOLATING IC PROFILES * * * * * * * * * * * * * * * * * * * * * * * * * *" << endl;
+  }
+
+  // Query x-vector with ghost cells:
+  arma::vec xq = mesh->xmg;
+
+  // Interpolate electron profiles:
+  // ==========================================================================================
+  // x-vector for input profiles:
+  arma::vec xv = IC->electrons.x;
+
+  // x-vector for interpolated profiles:
+  IC->electrons.x_mg = xq;
+
+  // Interpolate profiles at cell-center grid:
+  arma::interp1(xv,IC->electrons.n,xq,IC->electrons.n_mg);
+  arma::interp1(xv,IC->electrons.T,xq,IC->electrons.T_mg);
+
+  // Interpolate field profiles:
+  // ==========================================================================================
+  // x-vector for input profiles:
+  xv = IC->fields.x;
+
+  // x-vector for cell-center profiles:
+  IC->fields.x_mg = xq;
+
+  // Interpolate fields at cell-center grid:
+  arma::interp1(xv,IC->fields.Bx  ,xq,IC->fields.Bx_mg);
+  arma::interp1(xv,IC->fields.dBx ,xq,IC->fields.dBx_mg);
+  arma::interp1(xv,IC->fields.ddBx,xq,IC->fields.ddBx_mg);
+  arma::interp1(xv,IC->fields.Ex  ,xq,IC->fields.Ex_mg);
+
+  // Get reference magnetic field:
+  double x0 = params->mesh_params.x0;
+  interp_scalar(&IC->fields.x,&IC->fields.Bx,&x0,&params->mesh_params.B0);
+
+  // Interpolate ion profiles:
+  // ==========================================================================================
+  int totalNumSpecies(params->numberOfParticleSpecies + params->numberOfTracerSpecies);
+  for (int ss = 0; ss < totalNumSpecies; ss ++)
+  {
+    // x-vector for input profiles:
+    xv = IC->ions.at(ss).x;
+
+    // x-vector for cell-center profiles:
+    IC->ions.at(ss).x_mg = xq;
+
+    // Interpolate profiles at cell-center grid:
+    arma::interp1(xv,IC->ions.at(ss).n      ,xq,IC->ions.at(ss).n_mg);
+    arma::interp1(xv,IC->ions.at(ss).Tpar   ,xq,IC->ions.at(ss).Tpar_mg);
+    arma::interp1(xv,IC->ions.at(ss).Tper   ,xq,IC->ions.at(ss).Tper_mg);
+    arma::interp1(xv,IC->ions.at(ss).upar   ,xq,IC->ions.at(ss).upar_mg);
+    arma::interp1(xv,IC->ions.at(ss).ncp_pdf,xq,IC->ions.at(ss).ncp_pdf_mg);
+  }
+
+  // MPI_Barrier(MPI_COMM_WORLD);
+
+  // Print to terminal:
+  // ==================
+  // if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+    cout << "* * * * * * * * * * * * IC PROFILES INTERPOLATED  * * * * * * * * * * * * * * * * * *" << endl;
+  }
+}
+
+// #########################################################################################################
+
+void init_TYP::initialize_fields(params_TYP * params, IC_TYP * IC, fields_TYP * fields)
+{
+  // MPI_Barrier(MPI_COMM_WORLD);
+
+  // Print to terminal:
+  // ==================
+  // if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+      cout << endl << "* * * * * * * * * * * * INITIALIZING ELECTROMAGNETIC FIELDS * * * * * * * * * * * * * * * * * *" << endl;
+  }
+
+  // Size of vectors wth ghost cells:
+  int Nxg = params->mesh_params.Nx + 2;
+
+  // Allocate memory to field quantities, including ghost cells:
+  fields->Bx_m.zeros(Nxg);
+  fields->dBx_m.zeros(Nxg);
+  fields->ddBx_m.zeros(Nxg);
+  fields->Ex_m.zeros(Nxg);
+
+  // Assign value to profiles:
+  fields->Bx_m   = IC->fields.Bx_mg;
+  fields->dBx_m  = IC->fields.dBx_mg;
+  fields->ddBx_m = IC->fields.ddBx_mg;
+  fields->Ex_m   = IC->fields.Ex_mg;
+
+  // Calculate cross sectional area vector based on latest B field:
+  double B0 = params->mesh_params.B0;
+  double A0 = params->mesh_params.A0;
+  fields->getAm(A0,B0);
+
+  // MPI_Barrier(MPI_COMM_WORLD);
+
+  // Print to terminal:
+  // ==================
+  // if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+      cout << "* * * * * * * * * * * * ELECTROMAGNETIC FIELDS INITIALIZED  * * * * * * * * * * * * * * * * * *" << endl;
+  }
+
+}
+
+// #########################################################################################################
+
+void init_TYP::initialize_electrons(params_TYP * params, IC_TYP * IC, electrons_TYP * electrons)
+{
+  // MPI_Barrier(MPI_COMM_WORLD);
+
+    // Print to terminal:
+    // ==================
+  // if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+      cout << endl << "* * * * * * * * * * * * INITIALIZING ELECTRON FLUID * * * * * * * * * * * * * * * * * * * * * * * * * *" << endl;
+  }
+
+  // Size of vectors wth ghost cells:
+  int Nxg = params->mesh_params.Nx + 2;
+
+  // Allocate memory to profile quantities, including ghost cells:
+  electrons->Te_m.zeros(Nxg);
+
+  // Assign value to profiles:
+  electrons->Te_m = IC->electrons.T_mg;
+
+  // MPI_Barrier(MPI_COMM_WORLD);
+
+  // Print to terminal:
+  // ==================
+  // if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+    cout << "* * * * * * * * * * * * ELECTRON FLUID INITIALIZED  * * * * * * * * * * * * * * * * * *" << endl;
+  }
+}
+
+// #########################################################################################################
+
+void init_TYP::calculate_IC_particleWeight(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, fields_TYP * fields, vector<ions_TYP> * IONS)
 {
   //MPI_Barrier(MPI_COMM_WORLD);
 
@@ -606,6 +862,171 @@ void init_TYP::calculateGlobalQuantities(params_TYP * params, IC_TYP * IC, vecto
   // ==================
   //if (params->mpi.MPI_DOMAIN_NUMBER == 0)
   {
-      cout << endl << "* * * * * * * * * * * CALCULATING GLOBAL QUANTITIES * * * * * * * * * * * * * * * * *\n";
+      cout << endl << "* * * * * * * * * * CALCULATING PARTICLE WEIGHT INITIAL PROFILE * * * * * * * * * * * * * * * * * *" << endl;
   }
+
+  // Define total number of ions species:
+  // ====================================
+  int totalNumSpecies(params->numberOfParticleSpecies + params->numberOfTracerSpecies);
+  IONS->resize(totalNumSpecies);
+
+  // Loop over all ion species:
+  for (int ss = 0; ss < totalNumSpecies; ss ++)
+  {
+    // Number of cells in mesh:
+    int Nx = params->mesh_params.Nx;
+
+    // Allocate memory for temporary variables:
+    arma::vec xm(Nx,fill::zeros);
+    arma::vec nm_cp(Nx,fill::zeros);
+    arma::vec nm_cp_pdf(Nx,fill::zeros);
+    arma::vec nm_cp_cell(Nx,fill::zeros);
+    arma::vec nm(Nx,fill::zeros);
+    arma::vec Am(Nx,fill::zeros);
+    arma::vec am(Nx,fill::zeros);
+
+    // Calculate N_CP and nm_cp:
+    // ===================================================
+    // Initial N_CP estimate:
+    int N_CP = params->ions_params.at(ss).N_CP;
+
+    // Initialize nm_cp (no ghost cells):
+    double dx = params->mesh_params.dx;
+
+    // Assign value to nm_cp:
+    xm = IC->ions.at(ss).x_mg.subvec(1,Nx);
+    nm_cp = IC->ions.at(ss).ncp_pdf_mg.subvec(1,Nx);
+
+    // Normalize expression:
+    double integralTerm = arma::sum(nm_cp)*dx;
+    nm_cp_pdf = nm_cp/integralTerm;
+    nm_cp = N_CP*nm_cp_pdf;
+
+    // Calculate the number of computational particles per cell rounded to the nearest number:
+    nm_cp_cell = round(nm_cp*dx);
+
+    // Final value of N_CP:
+    N_CP = arma::sum(nm_cp_cell);
+    IONS->at(ss).N_CP = N_CP;
+
+    // Recalculate nm_cp using new N_CP:
+    nm_cp = N_CP*nm_cp_pdf;
+
+    // Calculate N_R:
+    // =====================================================
+    double A0 = params->mesh_params.A0;
+    double B0 = params->mesh_params.B0;
+    Am = A0*B0/IC->fields.Bx_mg.subvec(1,Nx);
+    nm = IC->ions.at(ss).n_mg.subvec(1,Nx);
+    double N_R = sum(nm%Am)*dx;
+    IONS->at(ss).N_R = N_R;
+
+    xm.save("x.txt",arma::raw_ascii);
+    nm.save("y.txt",arma::raw_ascii);
+    Am.save("z.txt",arma::raw_ascii);
+
+    cout << "N_CP = " << IONS->at(ss).N_CP << endl;
+    cout << "N_R = " << IONS->at(ss).N_R << endl;
+
+    // Calculate particle weight profile:
+    // =====================================================
+    double mean_ai = params->ions_IC.at(ss).mean_ai;
+    am = mean_ai*(N_CP/N_R)*(nm%Am/nm_cp);
+
+
+    // Need to create a vec::am to store the particle weight profile IC and als the assocaited nm_cp
+    cout << "mean_ai = " << mean_ai << endl;
+
+    // xm.print("xm = ");
+    // nm_cp.print("nm_cp = ");
+
+    // xm.save("x.txt",arma::raw_ascii);
+    // nm_cp.save("y.txt",arma::raw_ascii);
+
+    // cout << "dx = " << dx << endl;
+    // cout << "integralTerm = " << integralTerm << endl;
+    // cout << "    arma::sum(nm_cp)*dx = " <<     arma::sum(nm_cp)*dx << endl;
+
+    // cout << "integral of nm_cp = " << arma::sum(nm_cp)*dx << endl;
+
+    /*
+    // Get reference magnetic field:
+    double x0 = params->mesh_params.x0;
+    interp_scalar(&IC->fields.x,&IC->fields.Bx,&x0,&params->mesh_params.B0);
+
+    // Calculate cross sectional area vector based on latest B field:
+    double B0 = params->mesh_params.B0;
+    double A0 = params->mesh_params.A0;
+    fields->getAm(A0,B0);
+
+    */
+
+
+    // Get profiles from IC and interpolate them:
+    // arma::vec nm;
+    // arma::interp1(IC->ions.at(ss).x,IC->ions.at(ss).n,mesh->xm,nm);
+    // arma::vec Am;
+
+
+
+
+    // mesh->xm.print("xm =");
+    // nm.print("nm = ");
+
+    // Define CP pdf:
+    // nm_cp = N_CP*
+    // cout << "N_CP = " << N_CP << endl;
+    // nm_cp.print("nm_cp = ");
+  }
+
+
+  //MPI_Barrier(MPI_COMM_WORLD);
 }
+
+/*
+void init_TYP::initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, vector<ions_TYP> * IONS)
+{
+  //MPI_Barrier(MPI_COMM_WORLD);
+
+  // Print to terminal:
+  // ==================
+  //if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+      cout << endl << "* * * * * * * * * * * * SETTING UP IONS INITIAL CONDITION * * * * * * * * * * * * * * * * * *" << endl;
+  }
+
+  // Define total number of ions species:
+  // ====================================
+  int totalNumSpecies(params->numberOfParticleSpecies + params->numberOfTracerSpecies);
+
+}
+
+void init_TYP::calculate_globalQuantities(params_TYP * params, mesh_TYP * mesh,fields_TYP *fields, vector<ions_TYP> * IONS)
+{
+  // Get mesh-defined cross sectional area:
+  arma::vec Am = fields->Am;
+
+  // Calculate N_R for each ion species:
+  for(int ss = 0; ss < IC->ions.size() ; ss++)
+  {
+    // Interpolate density:
+    arma::vec yv = IC->ions.at(ss).n;
+    arma::interp1(xv,yv,xq,yq);
+    arma::vec nm = yq;
+
+    // N_R:
+    arma::vec Am = mesh->Am;
+    double dx = params->mesh_params.dx;
+    double N_R = arma::sum(nm%Am)*dx;
+    IONS->at(ss).N_R = N_R;
+
+    // Ion parameters:
+    double M = IONS->at(ss).M;
+    double Z = IONS->at(ss).Z;
+    double Q = F_E*Z;
+
+    cout << "N_R = " << N_R << endl;
+  }
+
+}
+*/

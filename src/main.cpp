@@ -33,19 +33,46 @@ int main(int argc, char* argv[])
     // Electromagnetic fields:
     fields_TYP fields;
 
-    // Initialization object:
-    init_TYP init(&params, argc, argv);
+    // Mesh object:
+    mesh_TYP mesh;
 
     // Object to hold IC condition profiles:
     IC_TYP IC;
 
-    // Read input files:
-    // =========================================================================
-    // 1- Read "input_file.input" into "params"
-    // 2- Read "ions_properties.ion" into "params":
-    // 3- Read IC profiles from external files into "IC":
-    init.readInputFile(&params);
-    init.readIonPropertiesFile(&params);
-    init.readInitialConditionProfiles(&params, &IC);
+    // Initialization object:
+    init_TYP init(&params, argc, argv);
 
+    // =========================================================================
+    // - Read "input_file.input" into "params"
+    init.read_inputFile(&params);
+
+    // - Read "ions_properties.ion" into "params":
+    init.read_ionsPropertiesFile(&params);
+
+    // - Create mesh using input parameters:
+    init.create_mesh(&params, &mesh);
+
+    // - Read IC profiles from external files into "IC":
+    init.read_IC_profiles(&params, &mesh, &IC);
+
+    // - Interpolate IC profiles to mesh grid:
+    init.interpolate_IC_profiles(&params, &mesh, &IC);
+
+    // - Initialize fields using IC field profiles:
+    init.initialize_fields(&params,&IC,&fields);
+
+    // - Initialize electrons using IC profiles:
+    init.initialize_electrons(&params,&IC,&electrons);
+
+    // Calculate particle weight initial condition profile:
+    // PUT before initialize fields and electrons
+    init.calculate_IC_particleWeight(&params,&IC,&mesh,&fields,&IONS);
+
+    // fields.Bx_m.print("Bx_m");
+
+    // - Initialize ions using IC profiles:
+    //init.initialize_ions(&params,&IC,&mesh,&IONS);
+
+    // Calculate global quantities: N_R, N_SP:
+    //init.calculate_globalQuantities(&params,&mesh,&fields,&IONS);
 }

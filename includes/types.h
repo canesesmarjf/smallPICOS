@@ -6,6 +6,7 @@
 #define ARMA_ALLOW_FAKE_GCC
 #include <armadillo>
 #include <string>
+#include <cmath>
 
 using namespace std;
 
@@ -21,17 +22,23 @@ using namespace std;
 #define F_C 299792458.0 	// Light speed in m/s
 #define F_MU (4*M_PI)*1E-7 	// Vacuum permeability in N/A^2
 
+// Class to hold ion parameters:
+// =============================================================================
+class ions_params_TYP
+{
+public:
+  int SPECIES;
+  int N_CP; // Number of computational particles
+  int pct_N_CP_Output; // percentage of N_CP recorded in output file
+  int Z;
+  double M;
+};
+
 // Class to hold the initial conditions PARAMETERS for each ion species:
 // =============================================================================
 class ions_IC_params_TYP
 {
 public:
-    int SPECIES;
-    int N_CP; // Number of computational particles
-    int pct_N_CP_Output; // percentage of N_CP recorded in output file
-    int Z;
-    int M;
-
     string fileName;
     double Tpar_offset;
     double Tpar_scale;
@@ -40,6 +47,9 @@ public:
     double upar_offset;
     double upar_scale;
     double densityFraction;
+    double mean_ai; // Mean particle weight
+
+    string CP_fileName; // Filename that indicates where the computational particle density profile is to be found.
 };
 
 // Class to hold the boundary conditions PARAMETERS for each ion species:
@@ -82,9 +92,9 @@ public:
     double Bx_scale;
 };
 
-// Class to store geometrical PARAMETERS:
+// Class to store mesh PARAMETERS:
 // =============================================================================
-class geometry_params_TYP
+class mesh_params_TYP
 {
 public:
   double dx_norm;
@@ -93,6 +103,15 @@ public:
   double r0_max;
   double Lx_min;
   double Lx_max;
+
+  double ionSkinDepth;
+  int Nx;
+  double dx;
+  double A0;
+  double B0;
+
+  // Methods:
+  void getA0();
 };
 
 // Class to hold initial conditon PROFILES for each ion species:
@@ -100,31 +119,59 @@ public:
 class ions_IC_TYP
 {
 public:
+    // Store profiles as given by H5 file:
     arma::vec x;
     arma::vec n;
     arma::vec Tpar;
     arma::vec Tper;
     arma::vec upar;
+    arma::vec ncp_pdf; // PDF that defines initial computational particle density profile
+
+    // Store profiles interpolated at the cell-centers of the mesh with ghost cells included:
+    arma::vec x_mg;
+    arma::vec n_mg;
+    arma::vec Tpar_mg;
+    arma::vec Tper_mg;
+    arma::vec upar_mg;
+    arma::vec ncp_pdf_mg;
+
+    // IC profiles calculated in the code (with ghost cells included):
+    arma::vec a_mg;
+    arma::vec ncp_mg;
 };
 
 // Class to hold the initial conditions PROFILES for the electrons:
 // =============================================================================
 struct electrons_IC_TYP
 {
+    // Store profiles as given by H5 file:
     arma::vec x;
     arma::vec n;
     arma::vec T;
+
+    // Store profiles interpolated at the cell-centers of the mesh:
+    arma::vec x_mg;
+    arma::vec n_mg;
+    arma::vec T_mg;
 };
 
 // Class to hold the initial conditions PROFILES for the fields:
 // =============================================================================
 struct fields_IC_TYP
 {
+    // Store profiles as given by H5 file:
     arma::vec x;
     arma::vec Bx;
     arma::vec Ex;
     arma::vec dBx;
     arma::vec ddBx;
+
+    // Store profiles interpolated at the cell-centers of the mesh:
+    arma::vec x_mg;
+    arma::vec Bx_mg;
+    arma::vec Ex_mg;
+    arma::vec dBx_mg;
+    arma::vec ddBx_mg;
 };
 
 // Class to hold all initial condition PROFILES:
@@ -220,6 +267,8 @@ public:
     arma::vec dBx_m;
     arma::vec ddBx_m;
 
+    arma::vec Am;
+
     fields_TYP(){};
 
     //fields_TYP(unsigned int N) : Ex_m(N), Bx_m(N), dBx_m(N), ddBx_m(N) {};
@@ -228,6 +277,7 @@ public:
 
     //void zeros(unsigned int N);
     //void fill(double A);
+    void getAm(double A0, double B0);
 };
 
 //  Define structure to store characteristic values for the normalization:
@@ -273,6 +323,20 @@ struct SW_TYP
 
 };
 
+// Class to store position of mesh cell-centers:
+class mesh_TYP
+{
+public:
+  arma::vec xm;
+  arma::vec xmg;
+  arma::vec Am;
+  arma::vec Bxm;
+
+  // Overloaded constructor:
+  // mesh_TYP(params_TYP * params);
+
+};
+
 // Struct to store simulation PARAMETERS:
 // =============================================================================
 struct params_TYP
@@ -305,15 +369,15 @@ struct params_TYP
     // Needs redefinition as we dont use the cyclotron period as reference anymore:
     double outputCadence;//Save variables each "outputCadence" times the background ion cycloperiod.
 
-    // Geometric information:
-    geometry_params_TYP geometry;
-
     // Mesh parameters:
-    //mesh_params_TYP mesh;
+    mesh_params_TYP mesh_params;
 
     // Ions properties:
     int numberOfParticleSpecies; // This species are evolved self-consistently with the fields
     int numberOfTracerSpecies; // This species are not self-consistently evolved with the fields
+
+    // Ion parameters:
+    vector<ions_params_TYP> ions_params;
 
     // Initial conditions parameters:
     electrons_IC_params_TYP electrons_IC;
@@ -336,23 +400,27 @@ struct params_TYP
     int filtersPerIterationIons;
 
     // How are these used?
-    double ionLarmorRadius;
-    double ionSkinDepth;
-    double ionGyroPeriod;
+    //double ionLarmorRadius;
+    //double ionSkinDepth;
+    //double ionGyroPeriod;
 
     //double DrL;
     //double dp;
     double dx_norm;
 
     // How are the following used?
-    int checkStability;
-    int rateOfChecking;//Each 'rateOfChecking' iterations we use the CLF criteria for the particles to stabilize the simulation
+    //int checkStability;
+    //int rateOfChecking;//Each 'rateOfChecking' iterations we use the CLF criteria for the particles to stabilize the simulation
 
     // MPI parameters
     // mpi_params_TYP mpi;
 
     // Error codes
     map<int,string> errorCodes;
+
+    //  Methods:
+    void getCharacteristicIonSkinDepth();
+    void getNx(double ionSkinDepth);
 
     // Constructor
     params_TYP(){};

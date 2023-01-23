@@ -12,8 +12,9 @@ LIBS_ARMA=lib_ARMA/lib/
 CPPFLAGS= -O3 -I$(INCL) -I$(INCL_ARMA) -I$(INCL_HDF5)
 
 BINARIES = $(addprefix $(OBJ)/,\
-main.o	          	\
+main.o	       	\
 initialize.o		\
+types.o         \
 )
 
 # NOTE:

@@ -49,6 +49,7 @@ cd $ARMA_VERSION
 # cmake -DCMAKE_INSTALL_PREFIX:PATH=$ARMA_INSTALL_DIR -DDETECT_HDF5=false .
 cmake -DCMAKE_INSTALL_PREFIX=$ARMA_INSTALL_DIR -DDETECT_HDF5=false .
 
+
 # Run makefile to create dynamic libray:
 # macOS: *.dylib
 # Linux: *.so

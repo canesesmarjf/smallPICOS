@@ -39,14 +39,25 @@ class init_TYP
 
     init_TYP(params_TYP * params, int argc, char* argv[]);
 
-    void readInputFile(params_TYP * params);
+    void read_inputFile(params_TYP * params);
 
-    void readIonPropertiesFile(params_TYP * params);
+    void read_ionsPropertiesFile(params_TYP * params);
 
-    void readInitialConditionProfiles(params_TYP * params, IC_TYP * IC);
+    void read_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_TYP * IC);
 
-    void calculateGlobalQuantities(params_TYP * params, IC_TYP * IC, vector<ions_TYP> * IONS);
+    void interpolate_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_TYP * IC);
 
+    void create_mesh(params_TYP * params, mesh_TYP * mesh);
+
+    void initialize_fields(params_TYP * params, IC_TYP * IC, fields_TYP * fields);
+
+    void initialize_electrons(params_TYP * params, IC_TYP * IC, electrons_TYP * electrons);
+
+    void calculate_IC_particleWeight(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, fields_TYP * fields, vector<ions_TYP> * IONS);
+
+    //void initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, vector<ions_TYP> * IONS);
+
+    //void calculate_globalQuantities(params_TYP * params, mesh_TYP * mesh,fields_TYP *fields, vector<ions_TYP> * IONS);
 };
 
 #endif

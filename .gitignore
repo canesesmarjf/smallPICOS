@@ -2,3 +2,10 @@
 *.txt
 obj/
 bin/
+output_files/
+lib_ARMA/
+lib_HDF5/
+lib_*/
+InitialConditions/*.tiff
+InitialConditions/*.pdf
+InitialConditions/*.h5
