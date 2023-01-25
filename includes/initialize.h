@@ -53,11 +53,13 @@ class init_TYP
 
     void initialize_electrons(params_TYP * params, IC_TYP * IC, electrons_TYP * electrons);
 
-    void calculate_IC_particleWeight(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, fields_TYP * fields, vector<ions_TYP> * IONS);
+    void calculate_IC_particleWeight(params_TYP * params, IC_TYP * IC, vector<ions_TYP> * IONS);
 
-    //void initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, vector<ions_TYP> * IONS);
+    void initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, vector<ions_TYP> * IONS);
 
-    //void calculate_globalQuantities(params_TYP * params, mesh_TYP * mesh,fields_TYP *fields, vector<ions_TYP> * IONS);
+    void allocate_meshDefinedIonArrays(params_TYP * params, ions_TYP * IONS);
+
+    void allocate_particleDefinedIonArrays(params_TYP * params, ions_TYP * IONS);
 };
 
 #endif

@@ -28,7 +28,7 @@ class ions_params_TYP
 {
 public:
   int SPECIES;
-  int N_CP; // Number of computational particles
+  int N_CP; // Number of computational particles over entire simulation
   int pct_N_CP_Output; // percentage of N_CP recorded in output file
   int Z;
   double M;
@@ -188,56 +188,72 @@ public:
 // =============================================================================
 class ions_TYP
 {
-public:
-    int SPECIES; // 0: tracer 1: GC particles
-    uint N_CP;   // Number of computational particles
-    double Z;
-    double M;
 
-    double Q;
-    double N_R;  // Number of real particles
-    double N_SP; // Number of super-particles
+  // Notes:
+  // Consider double get_K();
+  // Consider double get_NR(); Keep in mind that this calculation will be local to the MPI
+  // To get the real N_R we would need to reduce over all MPI process and then broadcast
+
+public:
+    int SPECIES;   // 0: tracer 1: GC particles
+    uint N_CP;     // Number of computational particles in ENTIRE simulation
+    uint N_CP_MPI; // Number of computational particles per MPI process
+    double K;      // Distribution function normalization constant K = N_R/N_SP
+
+    double N_R;    // Number of real particles in ENTIRE simulation (Dynamic)
+    double N_SP;   // Number of super-particles in ENTIRE simulation (Dynamic)
+
+    double Z;      // Atomic number
+    double M;      // Mass
+    double Q;      // Charge
+
+    // Variables to control computational particle output:
+    double pct_N_CP_Output; // Fraction of computational particles from ENTIRE simulation to record in output file
+    int N_CP_Output;        // Number of computational particles from ENTIRE simulation to record in output file
+    int N_CP_Output_MPI;    // Number of computational particles per MPI to record in output file
 
     // Particle-defined quantities:
     // ============================
+    // Each MPI process has its own ensemble of particles and associated attributes as recorded below:
     // Attributes:
     arma::vec x_p;
-    arma::vec v_p;
+    arma::mat v_p;
     arma::vec a_p;
 
     // Nearest grid point
-//    arma::ivec mn;
+    arma::ivec mn;
 
     // Fields:
-//    arma::vec Ex_p;
-//    arma::vec Bx_p;
-//    arma::vec dBx_p;
-//    arma::vec ddBx_p;
+    arma::vec Ex_p;
+    arma::vec Bx_p;
+    arma::vec dBx_p;
+    arma::vec ddBx_p;
 
-    // Moments:
-//    arma::vec n_p;
-//    arma::vec nv_p;
-//    arma::vec Tpar_p;
-//    arma::vec Tper_p;
-//    arma::vec Te_p;
+    // Moments: (Needed for collision operator)
+    arma::vec n_p;
+    arma::vec nv_p;
+    arma::vec Tpar_p;
+    arma::vec Tper_p;
+    arma::vec Te_p;
 
     // Assignment function:
-//    arma::vec wxl;
-//    arma::vec wxc;
-//    arma::vec wxr;
+    arma::vec wxl;
+    arma::vec wxc;
+    arma::vec wxr;
 
     // Mesh-defined quantities:
     // ============================
-//    arma::vec n_m;
-//    arma::vec nv_m;
-//    arma::vec P11_m;
-//    arma::vec P22_m;
-//    arma::vec Tpar_m;
-//    arma::vec Tper_m;
-//
-//    arma::vec ncp_m;
-//    arma::vec ncp_cell_m;
+    // These quantities record the values reduced over all MPI processes.
+    // Each MPI process will have a partial mesh-defined quantity which then needs to be reduced over all MPI processes to get the final value for the mesh-defined quantity.
+    arma::vec n_m;
+    arma::vec nv_m;
+    arma::vec P11_m;
+    arma::vec P22_m;
+    arma::vec Tpar_m;
+    arma::vec Tper_m;
 
+    arma::vec ncp_m;
+    arma::vec ncp_m_MPI; // Computational particle density in each MPI process
 };
 
 // Class to represent electrons species:
@@ -327,6 +343,8 @@ struct SW_TYP
 class mesh_TYP
 {
 public:
+  int Nx;
+  double dx;
   arma::vec xm;
   arma::vec xmg;
   arma::vec Am;
@@ -363,6 +381,7 @@ struct params_TYP
     int timeIterations;
 
     // Consider eliminating one of the following:
+    // Or call the 2nd one dt_norm
     double DT;//Time step
     double DTc;//Cyclotron period fraction.
 
@@ -406,7 +425,6 @@ struct params_TYP
 
     //double DrL;
     //double dp;
-    double dx_norm;
 
     // How are the following used?
     //int checkStability;
@@ -420,7 +438,7 @@ struct params_TYP
 
     //  Methods:
     void getCharacteristicIonSkinDepth();
-    void getNx(double ionSkinDepth);
+    void get_Nx_dx(double ionSkinDepth);
 
     // Constructor
     params_TYP(){};

@@ -11,9 +11,9 @@ using namespace arma;
 // Make use of const attribute to avoid writting to some argyments
 
 
-void dbg(int i)
+void debug(int i)
 {
-  std::cout << "checkpoint " << i << endl;
+  std::cout << "debug " << i << endl;
 }
 
 // #########################################################################################################
@@ -300,10 +300,6 @@ void init_TYP::read_inputFile(params_TYP * params)
     params->mesh_params.Lx_max  = stod(parametersStringMap["M_Lx_max"]);
     params->mesh_params.getA0();
 
-    cout << "rmax =  " << params->mesh_params.r0_max  << endl;
-    cout << "rmin =  " << params->mesh_params.r0_min  << endl;
-    cout << "A0 =  " << params->mesh_params.A0  << endl;
-
     // RF parameters
     // -------------------------------------------------------------------------
     // params->RF.Prf        = stod( parametersStringMap["RF_Prf"] );
@@ -494,22 +490,24 @@ void init_TYP::create_mesh(params_TYP * params, mesh_TYP * mesh)
   // The characteristic density is given in the inputfile.
   // For the other terms, we use the charge and mass of the majority ion.
 
-  // Calculating Nx:
+  // Calculating Nx and dx:
   // ==================================================================
   // Calculate characteristic skin depth:
   params->getCharacteristicIonSkinDepth();
   double ionSkinDepth = params->mesh_params.ionSkinDepth;
 
   // Calculate Nx:
-  params->getNx(ionSkinDepth);
-  int Nx = params->mesh_params.Nx;
+  // This step makes use of the ion skin depth and x_norm from the input to
+  // Produce Nx and dx which satify this requirement.
+  params->get_Nx_dx(ionSkinDepth);
+  int Nx    = params->mesh_params.Nx;
+  double dx = params->mesh_params.dx;
 
-  // Calculate mesh-defined cell centers:
+  // Calculate mesh-defined cell center grid xm and xmg:
   // ==================================================================
   arma::vec xm  = arma::zeros(Nx);
   arma::vec xmg = arma::zeros(Nx+2);
   double Lx_min = params->mesh_params.Lx_min;
-  double dx     = params->mesh_params.dx;
 
   // No ghost cells:
   for (int i = 0; i < Nx; i++)
@@ -523,7 +521,10 @@ void init_TYP::create_mesh(params_TYP * params, mesh_TYP * mesh)
     xmg.at(i) = Lx_min + (i - 0.5)*dx;
   }
 
-  // Assign vectors:
+  // Assign values:
+  // ==================================================================
+  mesh->Nx  = Nx;
+  mesh->dx  = dx;
   mesh->xm  = xm;
   mesh->xmg = xmg;
 }
@@ -722,7 +723,7 @@ void init_TYP::interpolate_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_
   // x-vector for input profiles:
   arma::vec xv = IC->electrons.x;
 
-  // x-vector for interpolated profiles:
+  // Assign x-vector to output profiles:
   IC->electrons.x_mg = xq;
 
   // Interpolate profiles at cell-center grid:
@@ -734,7 +735,7 @@ void init_TYP::interpolate_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_
   // x-vector for input profiles:
   xv = IC->fields.x;
 
-  // x-vector for cell-center profiles:
+  // Assign x-vector to output profiles:
   IC->fields.x_mg = xq;
 
   // Interpolate fields at cell-center grid:
@@ -755,7 +756,7 @@ void init_TYP::interpolate_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_
     // x-vector for input profiles:
     xv = IC->ions.at(ss).x;
 
-    // x-vector for cell-center profiles:
+    // Assign x-vector to output profiles:
     IC->ions.at(ss).x_mg = xq;
 
     // Interpolate profiles at cell-center grid:
@@ -773,6 +774,117 @@ void init_TYP::interpolate_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_
   // if (params->mpi.MPI_DOMAIN_NUMBER == 0)
   {
     cout << "* * * * * * * * * * * * IC PROFILES INTERPOLATED  * * * * * * * * * * * * * * * * * *" << endl;
+  }
+}
+
+// #########################################################################################################
+
+void init_TYP::calculate_IC_particleWeight(params_TYP * params, IC_TYP * IC, vector<ions_TYP> * IONS)
+{
+  //MPI_Barrier(MPI_COMM_WORLD);
+
+  // Print to terminal:
+  // ==================
+  //if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+      cout << endl << "* * * * * * * * * * CALCULATING PARTICLE WEIGHT INITIAL PROFILE * * * * * * * * * * * * * * * * * *" << endl;
+  }
+
+  // Define total number of ions species:
+  int totalNumSpecies(params->numberOfParticleSpecies + params->numberOfTracerSpecies);
+
+  // Allocate space for IONS vector:
+  IONS->resize(totalNumSpecies);
+
+  // Mesh parameters:
+  int Nx    = params->mesh_params.Nx;
+  double dx = params->mesh_params.dx;
+  double A0 = params->mesh_params.A0;
+  double B0 = params->mesh_params.B0;
+
+  // Allocate memory for temporary variables (no ghost cells):
+  arma::vec xm(Nx,fill::zeros);
+  arma::vec nm_cp(Nx,fill::zeros);
+  arma::vec nm_cp_pdf(Nx,fill::zeros);
+  arma::vec nm_cp_cell(Nx,fill::zeros);
+  arma::vec nm(Nx,fill::zeros);
+  arma::vec Am(Nx,fill::zeros);
+  arma::vec am(Nx,fill::zeros);
+
+  // Loop over all ion species:
+  for (int ss = 0; ss < totalNumSpecies; ss ++)
+  {
+    // Calculate N_CP and nm_cp:
+    // ===================================================
+    // Inital value for nm_cp:
+    xm    = IC->ions.at(ss).x_mg.subvec(1,Nx);
+    nm_cp = IC->ions.at(ss).ncp_pdf_mg.subvec(1,Nx);
+
+    // Initial N_CP value provided by user:
+    int N_CP = params->ions_params.at(ss).N_CP;
+
+    // Update value of nm_cp based on user's input:
+    double I = arma::sum(nm_cp)*dx;
+    nm_cp_pdf = nm_cp/I;
+    nm_cp = N_CP*nm_cp_pdf;
+
+    // Calculate the number of computational particles per cell rounded to the nearest integer:
+    nm_cp_cell = round(nm_cp*dx);
+    nm_cp = nm_cp_cell/dx;
+
+    // Final value of N_CP:
+    N_CP = arma::sum(nm_cp)*dx;
+    cout << "N_CP = " << N_CP << endl;
+
+    // Assign value:
+    IONS->at(ss).N_CP = N_CP;
+    // IONS->at(ss).N_CP_MPI = N_CP/params->mpi.MPIS_PARTICLES;
+
+    // Recalculate nm_cp using new N_CP:
+    I = arma::sum(nm_cp)*dx;
+    nm_cp_pdf = nm_cp/I;
+    nm_cp = N_CP*nm_cp_pdf;
+
+    // Assign value:
+    IC->ions.at(ss).ncp_mg.zeros(Nx+2);
+    IC->ions.at(ss).ncp_mg.subvec(1,Nx) = nm_cp;
+
+    // Calculate N_R:
+    // =====================================================
+    Am = A0*B0/IC->fields.Bx_mg.subvec(1,Nx);
+    nm = IC->ions.at(ss).n_mg.subvec(1,Nx);
+    double N_R = sum(nm%Am)*dx;
+
+    // Assign value:
+    IONS->at(ss).N_R = N_R;
+
+    // Calculate N_SP:
+    // =====================================================
+    double mean_ai = params->ions_IC.at(ss).mean_ai;
+    double N_SP = mean_ai*N_CP;
+
+    // Assign value:
+    IONS->at(ss).N_SP = N_SP;
+
+    // Calculate normalization constant K for distribution function:
+    // =====================================================
+    // This value remains constant over entire simulations
+    IONS->at(ss).K = N_R/N_SP;
+
+    // Calculate particle weight IC profile (only for t = 0):
+    // =====================================================
+    am = (N_SP/N_R)*(nm%Am/nm_cp);
+
+    // Assign value:
+    IC->ions.at(ss).a_mg.zeros(Nx+2);
+    IC->ions.at(ss).a_mg.subvec(1,Nx) = am;
+  }
+
+  //MPI_Barrier(MPI_COMM_WORLD);
+
+  //if (params->mpi.MPI_DOMAIN_NUMBER == 0)
+  {
+      cout << endl << "* * * * * * * * * * * * * * * * * COMPLETE * * * * * * * * * * * * * * * * * *" << endl;
   }
 }
 
@@ -854,136 +966,6 @@ void init_TYP::initialize_electrons(params_TYP * params, IC_TYP * IC, electrons_
 
 // #########################################################################################################
 
-void init_TYP::calculate_IC_particleWeight(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, fields_TYP * fields, vector<ions_TYP> * IONS)
-{
-  //MPI_Barrier(MPI_COMM_WORLD);
-
-  // Print to terminal:
-  // ==================
-  //if (params->mpi.MPI_DOMAIN_NUMBER == 0)
-  {
-      cout << endl << "* * * * * * * * * * CALCULATING PARTICLE WEIGHT INITIAL PROFILE * * * * * * * * * * * * * * * * * *" << endl;
-  }
-
-  // Define total number of ions species:
-  // ====================================
-  int totalNumSpecies(params->numberOfParticleSpecies + params->numberOfTracerSpecies);
-  IONS->resize(totalNumSpecies);
-
-  // Loop over all ion species:
-  for (int ss = 0; ss < totalNumSpecies; ss ++)
-  {
-    // Number of cells in mesh:
-    int Nx = params->mesh_params.Nx;
-
-    // Allocate memory for temporary variables:
-    arma::vec xm(Nx,fill::zeros);
-    arma::vec nm_cp(Nx,fill::zeros);
-    arma::vec nm_cp_pdf(Nx,fill::zeros);
-    arma::vec nm_cp_cell(Nx,fill::zeros);
-    arma::vec nm(Nx,fill::zeros);
-    arma::vec Am(Nx,fill::zeros);
-    arma::vec am(Nx,fill::zeros);
-
-    // Calculate N_CP and nm_cp:
-    // ===================================================
-    // Initial N_CP estimate:
-    int N_CP = params->ions_params.at(ss).N_CP;
-
-    // Initialize nm_cp (no ghost cells):
-    double dx = params->mesh_params.dx;
-
-    // Assign value to nm_cp:
-    xm = IC->ions.at(ss).x_mg.subvec(1,Nx);
-    nm_cp = IC->ions.at(ss).ncp_pdf_mg.subvec(1,Nx);
-
-    // Normalize expression:
-    double integralTerm = arma::sum(nm_cp)*dx;
-    nm_cp_pdf = nm_cp/integralTerm;
-    nm_cp = N_CP*nm_cp_pdf;
-
-    // Calculate the number of computational particles per cell rounded to the nearest number:
-    nm_cp_cell = round(nm_cp*dx);
-
-    // Final value of N_CP:
-    N_CP = arma::sum(nm_cp_cell);
-    IONS->at(ss).N_CP = N_CP;
-
-    // Recalculate nm_cp using new N_CP:
-    nm_cp = N_CP*nm_cp_pdf;
-
-    // Calculate N_R:
-    // =====================================================
-    double A0 = params->mesh_params.A0;
-    double B0 = params->mesh_params.B0;
-    Am = A0*B0/IC->fields.Bx_mg.subvec(1,Nx);
-    nm = IC->ions.at(ss).n_mg.subvec(1,Nx);
-    double N_R = sum(nm%Am)*dx;
-    IONS->at(ss).N_R = N_R;
-
-    xm.save("x.txt",arma::raw_ascii);
-    nm.save("y.txt",arma::raw_ascii);
-    Am.save("z.txt",arma::raw_ascii);
-
-    cout << "N_CP = " << IONS->at(ss).N_CP << endl;
-    cout << "N_R = " << IONS->at(ss).N_R << endl;
-
-    // Calculate particle weight profile:
-    // =====================================================
-    double mean_ai = params->ions_IC.at(ss).mean_ai;
-    am = mean_ai*(N_CP/N_R)*(nm%Am/nm_cp);
-
-
-    // Need to create a vec::am to store the particle weight profile IC and als the assocaited nm_cp
-    cout << "mean_ai = " << mean_ai << endl;
-
-    // xm.print("xm = ");
-    // nm_cp.print("nm_cp = ");
-
-    // xm.save("x.txt",arma::raw_ascii);
-    // nm_cp.save("y.txt",arma::raw_ascii);
-
-    // cout << "dx = " << dx << endl;
-    // cout << "integralTerm = " << integralTerm << endl;
-    // cout << "    arma::sum(nm_cp)*dx = " <<     arma::sum(nm_cp)*dx << endl;
-
-    // cout << "integral of nm_cp = " << arma::sum(nm_cp)*dx << endl;
-
-    /*
-    // Get reference magnetic field:
-    double x0 = params->mesh_params.x0;
-    interp_scalar(&IC->fields.x,&IC->fields.Bx,&x0,&params->mesh_params.B0);
-
-    // Calculate cross sectional area vector based on latest B field:
-    double B0 = params->mesh_params.B0;
-    double A0 = params->mesh_params.A0;
-    fields->getAm(A0,B0);
-
-    */
-
-
-    // Get profiles from IC and interpolate them:
-    // arma::vec nm;
-    // arma::interp1(IC->ions.at(ss).x,IC->ions.at(ss).n,mesh->xm,nm);
-    // arma::vec Am;
-
-
-
-
-    // mesh->xm.print("xm =");
-    // nm.print("nm = ");
-
-    // Define CP pdf:
-    // nm_cp = N_CP*
-    // cout << "N_CP = " << N_CP << endl;
-    // nm_cp.print("nm_cp = ");
-  }
-
-
-  //MPI_Barrier(MPI_COMM_WORLD);
-}
-
-/*
 void init_TYP::initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh, vector<ions_TYP> * IONS)
 {
   //MPI_Barrier(MPI_COMM_WORLD);
@@ -995,38 +977,203 @@ void init_TYP::initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh
       cout << endl << "* * * * * * * * * * * * SETTING UP IONS INITIAL CONDITION * * * * * * * * * * * * * * * * * *" << endl;
   }
 
-  // Define total number of ions species:
-  // ====================================
   int totalNumSpecies(params->numberOfParticleSpecies + params->numberOfTracerSpecies);
 
-}
-
-void init_TYP::calculate_globalQuantities(params_TYP * params, mesh_TYP * mesh,fields_TYP *fields, vector<ions_TYP> * IONS)
-{
-  // Get mesh-defined cross sectional area:
-  arma::vec Am = fields->Am;
-
-  // Calculate N_R for each ion species:
-  for(int ss = 0; ss < IC->ions.size() ; ss++)
+  // Define ion parameters:
+  // ===========================================================
+  for (int s = 0; s < totalNumSpecies; s++)
   {
-    // Interpolate density:
-    arma::vec yv = IC->ions.at(ss).n;
-    arma::interp1(xv,yv,xq,yq);
-    arma::vec nm = yq;
+    IONS->at(s).SPECIES         = params->ions_params[s].SPECIES;
+    IONS->at(s).M               = params->ions_params[s].M;
+    IONS->at(s).Z               = params->ions_params[s].Z;
+    IONS->at(s).pct_N_CP_Output = params->ions_params[s].pct_N_CP_Output;
+    IONS->at(s).N_CP_Output     = floor((IONS->at(s).pct_N_CP_Output)/100)*IONS->at(s).N_CP;
+    // IONS->at(s).N_CP_Output_MPI = floor((IONS->at(s).pct_N_CP_Output)/100)*IONS->at(s).N_CP_MPI;
 
-    // N_R:
-    arma::vec Am = mesh->Am;
-    double dx = params->mesh_params.dx;
-    double N_R = arma::sum(nm%Am)*dx;
-    IONS->at(ss).N_R = N_R;
-
-    // Ion parameters:
-    double M = IONS->at(ss).M;
-    double Z = IONS->at(ss).Z;
+    double M = IONS->at(s).M;
+    double Z = IONS->at(s).Z;
     double Q = F_E*Z;
+    double f = params->ions_IC.at(s).densityFraction;
+    double n = params->CV.ne;
+    double B = params->CV.B;
 
-    cout << "N_R = " << N_R << endl;
+    /*
+    // Characteristic frequencies:
+    IONS->at(s).Q     = F_E*;
+    IONS->at(s).Wc    = Q*B/M;
+    IONS->at(s).Wp    = sqrt(f*n*Q*Q/(F_EPSILON*M));
+
+    // Characteristic thermal velocities:
+    IONS->at(s).VTper = sqrt(2.0*F_KB*params->CV.Tper/M);
+    IONS->at(s).VTpar = sqrt(2.0*F_KB*params->CV.Tpar/M);
+
+    // Characteristic lengths and time scales:
+    IONS->at(s).LarmorRadius = IONS->at(s).VTper/IONS->at(s).Wc;
+    IONS->at(s).SkinDepth    = F_C/IONS->at(s).Wp;
+    IONS->at(s).GyroPeriod   = 2.0*M_PI/IONS->at(s).Wc;
+    */
   }
 
+  // Allocate memory for ion arrays:
+  // ===========================================================
+  for (int s = 0; s < totalNumSpecies; s++)
+  {
+    allocate_meshDefinedIonArrays(params,&IONS->at(s));
+    // if (params->mpi.COMM_COLOR == PARTICLES_MPI_COLOR)
+    {
+        allocate_particleDefinedIonArrays(params, &IONS->at(s));
+    }
+  }
+
+  // Distribute computational particles according to IC profiles:
+  // ===========================================================
+  int Nx    = params->mesh_params.Nx;
+  double dx = params->mesh_params.dx;
+
+  // Loop over all ion species:
+  for (int s = 0; s < totalNumSpecies; s++)
+  {
+    int i_start = 0;
+    arma::vec N_CP_cell = round(IC->ions.at(s).ncp_mg*dx);
+    arma::vec x_c(N_CP_cell);
+
+    // Loop over all grid cells:
+    for (int m = 0; m < Nx; m++)
+    {
+      // Number of computational particles in mth cell:
+      int N = N_CP_cell(m+1);
+
+      // Define cell center:
+      double x_center = IC->ions.at(s).x_mg(m+1);
+      x_c(m+1) = x_center;
+
+      // Uniform random numbers between -1/2 to +1/2:
+      arma::vec R1 = arma::randu(N) - 0.5;
+
+      // Index range:
+      int i_end   = i_start + N - 1;
+
+      // Particle position:
+      IONS->at(s).x_p.subvec(i_start,i_end) = x_center + R1*dx;
+
+      // Increment particle counter:
+      i_start = i_end + 1;
+
+      cout << "iend = " << i_end << endl;
+
+    }
+
+    stringstream so;
+    so << s;
+    string fileName = "x_p_";
+    fileName = fileName + so.str() + ".txt";
+    IONS->at(s).x_p.save(fileName,arma::raw_ascii);
+    x_c.save("x_center.txt",arma::raw_ascii);
+  }
+
+
 }
+
+// #########################################################################################################
+
+void init_TYP::allocate_meshDefinedIonArrays(params_TYP * params, ions_TYP * IONS)
+{
+  int Nx = params->mesh_params.Nx;
+
+    // Ion density:
+  IONS->n_m.zeros(Nx + 2);
+  // IONS->n_m_.zeros(Nx + 2);
+  // IONS->n_m__.zeros(Nx + 2);
+  // IONS->n_m___.zeros(Nx + 2);
+
+  // Ion flux density:
+  IONS->nv_m.zeros(Nx + 2);
+  // IONS->nv_m_.zeros(Nx + 2);
+  // IONS->nv_m__.zeros(Nx + 2);
+
+  // Pressure tensors:
+  IONS->P11_m.zeros(Nx + 2);
+  IONS->P22_m.zeros(Nx + 2);
+
+  // Derived quantities:
+  IONS->Tpar_m.zeros(Nx + 2);
+  IONS->Tper_m.zeros(Nx + 2);
+}
+
+// #########################################################################################################
+
+void init_TYP::allocate_particleDefinedIonArrays(params_TYP * params, ions_TYP * IONS)
+{
+  // Numnber of computational particles per MPI:
+  uint N_CP = IONS->N_CP;
+
+  // Initialize particle-defined quantities:
+    // ==================================
+    IONS->x_p.zeros(N_CP);
+    IONS->v_p.zeros(N_CP,2);
+    IONS->a_p.zeros(N_CP);
+    IONS->mn.zeros(N_CP);
+
+    IONS->Ex_p.zeros(N_CP);
+    IONS->Bx_p.zeros(N_CP);
+    IONS->dBx_p.zeros(N_CP);
+    IONS->ddBx_p.zeros(N_CP);
+
+    IONS->wxc.zeros(N_CP);
+    IONS->wxl.zeros(N_CP);
+    IONS->wxr.zeros(N_CP);
+
+    IONS->n_p.zeros(N_CP);
+    IONS->nv_p.zeros(N_CP);
+    IONS->Tpar_p.zeros(N_CP);
+    IONS->Tper_p.zeros(N_CP);
+    IONS->Te_p.zeros(N_CP);
+
+    /*
+    // Initialize particle defined flags:
+    // ==================================
+    IONS->f1.zeros(N_CP);
+    IONS->f2.zeros(N_CP);
+    IONS->f3.zeros(N_CP);
+    //IONS->f4.zeros(N_CP);
+    IONS->f5.zeros(N_CP);
+
+
+    // Initialize particle kinetic energy at boundaries:
+    // ================================================
+    IONS->dE1.zeros(N_CP);
+    IONS->dE2.zeros(N_CP);
+    IONS->dE3.zeros(N_CP);
+    //IONS->dE4.zeros(N_CP);
+    IONS->dE5.zeros(N_CP);
+
+    // Initialize resonance number:
+    // ============================
+    IONS->resNum.zeros(N_CP);
+    IONS->resNum_.zeros(N_CP);
+
+    // Rf terms:
+    // ========
+    IONS->udErf.zeros(N_CP);
+    IONS->doppler.zeros(N_CP);
+    IONS->udE3.zeros(N_CP);
+    */
+
+    // Initialize magnetic moment:
+    // ===========================
+    //IONS->mu_p.zeros(N_CP);
+}
+
+/*
+xm.save("xm.txt",arma::raw_ascii);
+nm.save("nm.txt",arma::raw_ascii);
+Am.save("Am.txt",arma::raw_ascii);
+am.save("a_m.txt",arma::raw_ascii);
+nm_cp.save("nm_cp.txt",arma::raw_ascii);
+
+cout << "N_CP = " << IONS->at(ss).N_CP << endl;
+cout << "N_R = " << IONS->at(ss).N_R << endl;
+*/
+
+/*
 */

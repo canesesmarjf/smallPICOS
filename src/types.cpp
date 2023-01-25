@@ -14,7 +14,7 @@ void params_TYP::getCharacteristicIonSkinDepth()
   this->mesh_params.ionSkinDepth = ionSkinDepth;
 }
 
-void params_TYP::getNx(double ionSkinDepth)
+void params_TYP::get_Nx_dx(double ionSkinDepth)
 {
   // First estimate of dx:
   double dx_norm = this->mesh_params.dx_norm;

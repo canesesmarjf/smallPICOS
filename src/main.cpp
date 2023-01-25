@@ -19,8 +19,18 @@ using namespace arma;
 // Constants:
 # define PI arma::datum::pi
 
+// Notes:
+// - DTc could be changed to dt_norm
+// - DT could be changed to dt
+// - The use of FS could be eliminated and just have either electrons_TYP and ions_TYP have a method to make the spatial and temporal checks.
+// Reconsider the use of CV.Te, CV.Tpar and CV.Tper in the simulation. Are they really needed?
+
 int main(int argc, char* argv[])
 {
+    // Initialize MPI process:
+    // =========================================================================
+    //MPI_Init(&argc, &argv);
+
     // Input parameters for simulation:
     params_TYP params;
 
@@ -50,13 +60,16 @@ int main(int argc, char* argv[])
     init.read_ionsPropertiesFile(&params);
 
     // - Create mesh using input parameters:
-    init.create_mesh(&params, &mesh);
+    init.create_mesh(&params,&mesh);
 
     // - Read IC profiles from external files into "IC":
-    init.read_IC_profiles(&params, &mesh, &IC);
+    init.read_IC_profiles(&params,&mesh,&IC);
 
     // - Interpolate IC profiles to mesh grid:
-    init.interpolate_IC_profiles(&params, &mesh, &IC);
+    init.interpolate_IC_profiles(&params,&mesh,&IC);
+
+    // Calculate particle weight initial condition profile:
+    init.calculate_IC_particleWeight(&params,&IC,&IONS);
 
     // - Initialize fields using IC field profiles:
     init.initialize_fields(&params,&IC,&fields);
@@ -64,15 +77,6 @@ int main(int argc, char* argv[])
     // - Initialize electrons using IC profiles:
     init.initialize_electrons(&params,&IC,&electrons);
 
-    // Calculate particle weight initial condition profile:
-    // PUT before initialize fields and electrons
-    init.calculate_IC_particleWeight(&params,&IC,&mesh,&fields,&IONS);
-
-    // fields.Bx_m.print("Bx_m");
-
     // - Initialize ions using IC profiles:
-    //init.initialize_ions(&params,&IC,&mesh,&IONS);
-
-    // Calculate global quantities: N_R, N_SP:
-    //init.calculate_globalQuantities(&params,&mesh,&fields,&IONS);
+    init.initialize_ions(&params,&IC,&mesh,&IONS);
 }

@@ -9,10 +9,10 @@ advanceParticleMethod       1
 // Characteristic values:
 // =============================================================================
 CV_ne                       5.0E19
-CV_Te                       15
-CV_B                        1.5
-CV_Tpar                     15
-CV_Tper                     15
+CV_Te                       1000
+CV_B                        12
+CV_Tpar                     1000
+CV_Tper                     1000
 
 // Simulation time:
 // =============================================================================
