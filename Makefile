@@ -16,6 +16,7 @@ main.o	       	\
 initialize.o		\
 types.o         \
 output_H5.o     \
+PIC.o						\
 )
 
 # NOTE:
@@ -43,7 +44,7 @@ $(OBJ)/%.o: $(SRC)/%.cpp
 clean: cleanBin cleanObj
 
 cleanBin:
-	-rm -r $(BIN)/PICOS++
+	-rm -r $(BIN)/smallPICOS++
 
 cleanObj:
 	-rm -r $(OBJ)/*.o

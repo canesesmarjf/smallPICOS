@@ -12,6 +12,7 @@
 #include "types.h"
 #include "initialize.h"
 #include "output_H5.h"
+#include "PIC.h"
 
 // Namespaces used in code:
 using namespace std;
@@ -118,7 +119,7 @@ int main(int argc, char* argv[])
 
     // #
     // - Create PIC object:
-    // PIC_TYP PIC(&params, &CS, &fields, &IONS, &electrons);
+    PIC_TYP PIC(&params, &mesh, &fields, &IONS, &electrons);
 
     // - Create RF operator object:
     // RF_Operator_TYP RF_operator(&params,&CS,&fields,&IONS);
@@ -126,12 +127,8 @@ int main(int argc, char* argv[])
     // #
     // - Save 1st output:
     // HDF.saveOutputs(&params, &IONS, &electrons, &fields, &CS, 0, 0);
-    // HDF.saveData("output_files/HDF5/file_1.h5",&params,&IONS);
-    string fileName = "output_files/HDF5/file_1.h5";
-    string groupName = "/ions_0";
-    HDF.H5_writeToFile(fileName,groupName,"x_p",&IONS.at(0).x_p,0);
-    HDF.H5_writeToFile(fileName,groupName,"v_p",&IONS.at(0).v_p,1);
-    HDF.H5_writeToFile(fileName,groupName,"a_p",&IONS.at(0).a_p,1);
+    string fileName = "file_1.h5";
+    HDF.saveData(fileName,&params,&fields,&IONS);
 
     // - Start timing simulations:
     // t1 = MPI_Wtime();
@@ -144,14 +141,14 @@ int main(int argc, char* argv[])
       // if (params.SW.advancePos == 1)
       {
           // - Advance particle position and velocity to level X^(N+1):
-          // PIC.advanceParticles(&params, &fields, &IONS);
+          // PIC.advanceParticles(&params,&mesh,&fields, &IONS);
 
           // - Re-inject particles that leave computational domain:
           // particleBC.applyParticleReinjection(&params,&CS,&fields,&IONS);
 
           // #
           // - Assign cell:
-          // PIC.assignCell_AllSpecies(&params,&IONS);
+          // PIC.assignCell_AllSpecies(&params,&mesh,&IONS);
 
           // #
           // - Interpolate all fields:

@@ -193,6 +193,18 @@ xlabel('x [m]','Interpreter','latex','FontSize',18)
 ylabel('$n_m^{cp}$','Interpreter','latex','FontSize',18)
 title('Computational particle density','Interpreter','latex','FontSize',16)
 
+% Save figure:
+if saveFig
+    folderName = '';
+    figureName = 'Step_2_ComputPartProfiles';
+    
+    % PDF figure:
+    exportgraphics(gcf,[folderName,figureName,'.pdf'],'Resolution',600,'ContentType', 'vector') 
+
+    % TIFF figure:
+    exportgraphics(gcf,[folderName,figureName,'.tiff'],'Resolution',600) 
+end
+
 % Save data HDF5:
 % =========================================================================
 if saveData

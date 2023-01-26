@@ -15,11 +15,13 @@ using namespace std;
 class HDF_TYP
 {
 public:
-  void saveData(string fileName, params_TYP * params, vector<ions_TYP> * IONS);
+  void saveData(string fileName, params_TYP * params, fields_TYP * fields, vector<ions_TYP> * IONS);
 
-  void H5_writeToFile(string fileName,string groupName,string datasetName,arma::vec * v,int access);
+  void H5_writeToFile(string fileName,string groupName,string datasetName,arma::vec * v ,int access);
 
-  void H5_writeToFile(string fileName,string groupName,string datasetName,arma::mat * m,int access);
+  void H5_writeToFile(string fileName,string groupName,string datasetName,arma::ivec * v,int access);
+
+  void H5_writeToFile(string fileName,string groupName,string datasetName,arma::mat * m ,int access);
 };
 
 

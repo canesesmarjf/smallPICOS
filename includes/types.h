@@ -278,6 +278,7 @@ class fields_TYP
 {
 public:
 
+    arma::vec x_mg;
     arma::vec Ex_m;
     arma::vec Bx_m;
     arma::vec dBx_m;

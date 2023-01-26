@@ -11,7 +11,7 @@ IC_CP_pdf_fileName            computationalParticles_IC.h5
 // Species 1, general:
 // =============================================================================
 SPECIES1                      1
-N_CP1                         10000
+N_CP1                         50000
 pct_N_CP_Output1              100
 Z1                            1
 M1                            2.0
@@ -47,7 +47,7 @@ BC_G_fileName1
 // Species 2, general:
 // =============================================================================
 SPECIES2                      1
-N_CP2                         5000
+N_CP2                         15000
 mean_ai2                      1.5
 pct_N_CP_Output2              100
 Z2                            1

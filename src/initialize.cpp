@@ -674,7 +674,9 @@ void init_TYP::read_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_TYP * I
   for (int ss = 0; ss < totalNumSpecies; ss++)
   {
     y.load(arma::hdf5_name(fullPath,"n_pdf"));
-    IC->ions.at(ss).ncp_pdf = y;
+    offset = 1;
+    scale  = 0;
+    IC->ions.at(ss).ncp_pdf = offset + scale*y;
   }
 
   if (0)
@@ -905,12 +907,14 @@ void init_TYP::initialize_fields(params_TYP * params, IC_TYP * IC, fields_TYP * 
   int Nxg = params->mesh_params.Nx + 2;
 
   // Allocate memory to field quantities, including ghost cells:
+  fields->x_mg.zeros(Nxg);
   fields->Bx_m.zeros(Nxg);
   fields->dBx_m.zeros(Nxg);
   fields->ddBx_m.zeros(Nxg);
   fields->Ex_m.zeros(Nxg);
 
   // Assign value to profiles:
+  fields->x_mg   = IC->fields.x_mg;
   fields->Bx_m   = IC->fields.Bx_mg;
   fields->dBx_m  = IC->fields.dBx_mg;
   fields->ddBx_m = IC->fields.ddBx_mg;
@@ -1086,33 +1090,33 @@ void init_TYP::initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh
       i_start = i_end + 1;
     }
 
-    x_center.save("x_center.txt",arma::raw_ascii);
-
-    stringstream so;
-    so << s;
-    string fileName;
-    string extension = so.str() + ".txt";
-
-    fileName = "x_p_" + extension;
-    IONS->at(s).x_p.save(fileName,arma::raw_ascii);
-
-    so.clear();
-    so << s;
-    fileName = "a_p_" + extension;
-    IONS->at(s).a_p.save(fileName,arma::raw_ascii);
-
-    so.clear();
-    so << s;
-    fileName = "v_par_" + extension;
-    cout << "size v_p = " << IONS->at(s).v_p.size() << endl;
-    arma::vec y = IONS->at(s).v_p(span::all,0);
-    y.save(fileName,arma::raw_ascii);
-
-    so.clear();
-    so << s;
-    fileName = "v_per_" + extension;
-    arma::vec z = IONS->at(s).v_p(span::all,1);
-    z.save(fileName,arma::raw_ascii);
+    // x_center.save("x_center.txt",arma::raw_ascii);
+    //
+    // stringstream so;
+    // so << s;
+    // string fileName;
+    // string extension = so.str() + ".txt";
+    //
+    // fileName = "x_p_" + extension;
+    // IONS->at(s).x_p.save(fileName,arma::raw_ascii);
+    //
+    // so.clear();
+    // so << s;
+    // fileName = "a_p_" + extension;
+    // IONS->at(s).a_p.save(fileName,arma::raw_ascii);
+    //
+    // so.clear();
+    // so << s;
+    // fileName = "v_par_" + extension;
+    // cout << "size v_p = " << IONS->at(s).v_p.size() << endl;
+    // arma::vec y = IONS->at(s).v_p(span::all,0);
+    // y.save(fileName,arma::raw_ascii);
+    //
+    // so.clear();
+    // so << s;
+    // fileName = "v_per_" + extension;
+    // arma::vec z = IONS->at(s).v_p(span::all,1);
+    // z.save(fileName,arma::raw_ascii);
 
   }
 
@@ -1125,7 +1129,11 @@ void init_TYP::allocate_meshDefinedIonArrays(params_TYP * params, ions_TYP * ION
 {
   int Nx = params->mesh_params.Nx;
 
-    // Ion density:
+  // Computational particle density:
+  IONS->ncp_m.zeros(Nx + 2);
+  IONS->ncp_m_MPI.zeros(Nx + 2);
+
+  // Ion density:
   IONS->n_m.zeros(Nx + 2);
   // IONS->n_m_.zeros(Nx + 2);
   // IONS->n_m__.zeros(Nx + 2);
