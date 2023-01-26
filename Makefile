@@ -15,6 +15,7 @@ BINARIES = $(addprefix $(OBJ)/,\
 main.o	       	\
 initialize.o		\
 types.o         \
+output_H5.o     \
 )
 
 # NOTE:
@@ -28,7 +29,7 @@ types.o         \
 smallPICOS: $(BIN)/smallPICOS++
 
 $(BIN)/smallPICOS++: $(BINARIES)
-	$(COMPILER) -o $@ $^ -L$(LIBS_ARMA) -larmadillo -std=c++17 -DARMA_USE_HDF5 -L$(LIBS_HDF5) -lhdf5
+	$(COMPILER) -o $@ $^ -L$(LIBS_ARMA) -larmadillo -std=c++17 -DARMA_USE_HDF5 -L$(LIBS_HDF5) -lhdf5 -lhdf5_cpp
 
 	# For MacOS use the following:
 	install_name_tool -add_rpath @executable_path/../$(LIBS_ARMA) ./bin/smallPICOS++
