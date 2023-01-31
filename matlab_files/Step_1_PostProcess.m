@@ -69,14 +69,34 @@ hold on
 plot(d.fields.x_m,d.ions_0.n_m,'k.-')
 plot(d.fields.x_m,d.ions_1.n_m,'r.-')
 ylim([0,1.2]*max(d.ions_0.n_m))
+xlabel(['$x$ [m]'],'interpreter','latex','FontSize',18)
+title(['Real particle density $n_m^{R}$ [m$^{-3}$]'],'interpreter','latex','FontSize',18)
+
+figure
+plot(d.ions_0.x_p,d.ions_0.v_p(:,1),'k.');
+
+Npop = numel(d.ions_0.a_p);
+Nsample = round(Npop*0.6);
+R1 = randperm(Npop);
+rng = R1(1:Nsample);
+
+[f_pop,~] = histcounts2(d.ions_0.x_p     ,d.ions_0.v_p(:,1)  ,64,'Normalization','pdf');
+[f_sam,~] = histcounts2(d.ions_0.x_p(rng),d.ions_0.v_p(rng,1),64,'Normalization','pdf');
+
+figure; 
+surf(f_pop,'LineStyle','none')
+figure; 
+surf(f_sam,'LineStyle','none')
 
 figure;
-plot(d.ions_0.x_p,d.ions_0.v_p(:,1),'k.')
+subplot(2,1,1)
+hold on
+plot(trapz(f_pop,1))
+plot(trapz(f_sam,1))
 
-if 0
-    figure;
-    plot3(d.ions_0.x_p,d.ions_0.v_p(:,1),d.ions_0.v_p(:,2),'k.')
-end
+subplot(2,1,2)
+hold on
+plot(trapz(f_pop,2))
+plot(trapz(f_sam,2))
 
-figure;
-plot(d.fields.x_m,d.fields.Bx_m,'k.-')
+%% Functions:

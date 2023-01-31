@@ -674,19 +674,12 @@ void init_TYP::read_IC_profiles(params_TYP * params, mesh_TYP * mesh, IC_TYP * I
   for (int ss = 0; ss < totalNumSpecies; ss++)
   {
     y.load(arma::hdf5_name(fullPath,"n_pdf"));
-    offset = 0;
-    scale  = 1;
+    offset = 1;
+    scale  = 0;
     IC->ions.at(ss).ncp_pdf = offset + scale*y;
   }
 
-  if (0)
-  {
-    IC->ions.at(0).x.save("x.txt",arma::raw_ascii);
-    IC->ions.at(0).ncp_pdf.save("n_pdf.txt",arma::raw_ascii);
-  }
-
   // MPI_Barrier(MPI_COMM_WORLD);
-
 }
 
 // #########################################################################################################
@@ -1039,12 +1032,18 @@ void init_TYP::initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh
   {
     int i_start = 0;
     double M = IONS->at(s).M;
+    uint N_CP = IONS->at(s).N_CP;
     arma::vec N_CP_cell = round(IC->ions.at(s).ncp_mg*dx);
     arma::vec x_center  = IC->ions.at(s).x_mg;
     arma::vec a_m       = IC->ions.at(s).a_mg;
     arma::vec Tpar_m    = IC->ions.at(s).Tpar_mg;
     arma::vec Tper_m    = IC->ions.at(s).Tper_mg;
     arma::vec upar_m    = IC->ions.at(s).upar_mg;
+
+    // Temporary variables to hold particle-defined attributes:
+    arma::vec x_p(N_CP);
+    arma::vec a_p(N_CP);
+    arma::mat v_p(N_CP,2);
 
     // Loop over all grid cells:
     for (int m = 0; m < Nx; m++)
@@ -1060,11 +1059,11 @@ void init_TYP::initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh
 
       // Particle position:
       // ==================
-      IONS->at(s).x_p.subvec(i_start,i_end) = x_center(m+1) + R1*dx;
+      x_p.subvec(i_start,i_end) = x_center(m+1) + R1*dx;
 
       // Particle weight:
       // ==================
-      IONS->at(s).a_p.subvec(i_start,i_end) = a_m(m+1)*arma::ones(N);
+      a_p.subvec(i_start,i_end) = a_m(m+1)*arma::ones(N);
 
       // Parallel velocity:
       // ==================
@@ -1073,7 +1072,7 @@ void init_TYP::initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh
       arma::vec X2 = arma::randu(N);
       arma::vec xpar = sqrt(-log(X1))%cos(2*M_PI*X2);
 
-      IONS->at(s).v_p(span(i_start,i_end),0) = upar_m(m+1) + xpar*vTpar;
+      v_p(span(i_start,i_end),0) = upar_m(m+1) + xpar*vTpar;
 
       // Perpendicular velocity:
       // ==================
@@ -1084,42 +1083,21 @@ void init_TYP::initialize_ions(params_TYP * params, IC_TYP * IC, mesh_TYP * mesh
       arma::vec xz = sqrt(-log(X1))%sin(2*M_PI*X2);
       arma::vec xper = sqrt( pow(xy,2) + pow(xz,2) );
 
-      IONS->at(s).v_p(span(i_start,i_end),1) = xper*vTper;
+      v_p(span(i_start,i_end),1) = xper*vTper;
 
       // Increment particle counter:
       i_start = i_end + 1;
     }
 
-    // x_center.save("x_center.txt",arma::raw_ascii);
-    //
-    // stringstream so;
-    // so << s;
-    // string fileName;
-    // string extension = so.str() + ".txt";
-    //
-    // fileName = "x_p_" + extension;
-    // IONS->at(s).x_p.save(fileName,arma::raw_ascii);
-    //
-    // so.clear();
-    // so << s;
-    // fileName = "a_p_" + extension;
-    // IONS->at(s).a_p.save(fileName,arma::raw_ascii);
-    //
-    // so.clear();
-    // so << s;
-    // fileName = "v_par_" + extension;
-    // cout << "size v_p = " << IONS->at(s).v_p.size() << endl;
-    // arma::vec y = IONS->at(s).v_p(span::all,0);
-    // y.save(fileName,arma::raw_ascii);
-    //
-    // so.clear();
-    // so << s;
-    // fileName = "v_per_" + extension;
-    // arma::vec z = IONS->at(s).v_p(span::all,1);
-    // z.save(fileName,arma::raw_ascii);
+    // Now we need to "shuffle" the position of each computational particle in memory:
+    // Create random permutation of unsigned integers 1:N_CP list :
+    arma::uvec random_index_list = arma::randperm(N_CP);
 
+    // Assign to IONS->at(s).x_p, a_p, v_p:
+    IONS->at(s).x_p = x_p(random_index_list);
+    IONS->at(s).a_p = a_p(random_index_list);
+    IONS->at(s).v_p = v_p.rows(random_index_list);
   }
-
 
 }
 
