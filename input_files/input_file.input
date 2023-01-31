@@ -45,12 +45,6 @@ IC_Ex_offset                0.0
 IC_Ex_scale                 1.0
 IC_Bx_offset                0.0
 IC_Bx_scale                 1.0
-//IC_uniformBfield            0
-//IC_BX                       0.2
-//IC_BY                       0.0
-//IC_BZ                       0.0
-//IC_BX_NX                    200
-//IC_BX_fileName              MPEX_B_norm_PICOS_scenario_14.txt
 
 // Electrons initial conditions:
 // =============================================================================
