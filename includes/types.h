@@ -65,7 +65,6 @@ struct ions_BC_params_TYP
 
     double G;
     string G_fileName; // file that stores time dependent source rate
-    //int    G_NS;       // Size of file
 };
 
 // Class to hold the initial conditions PARAMETERS for electrons:
